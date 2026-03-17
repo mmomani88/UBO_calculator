@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="UBO Calc" />
+  <title>UBO Calculator · Lean Counsel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #080808; color: #EDE8E0; -webkit-font-smoothing: antialiased; }
+    body { font-family: 'DM Mono', monospace; overflow-x: hidden; }
+    select, input, button { font-family: 'DM Mono', monospace; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: #0F0F0F; }
+    ::-webkit-scrollbar-thumb { background: #2A2A2A; border-radius: 2px; }
+    select option { background: #161616; color: #EDE8E0; }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+    /* Safe area for iPhone notch */
+    .safe-top { padding-top: env(safe-area-inset-top); }
+    .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useMemo, useCallback } = React;
+
+const C = {
+  bg: "#080808", surface: "#0F0F0F", surface2: "#161616", surface3: "#1E1E1E",
+  border: "#242424", borderLight: "#2E2E2E",
+  gold: "#C9A84C", goldLight: "#E8C97A", goldDim: "#7A6030", goldFaint: "rgba(201,168,76,0.09)",
+  text: "#EDE8E0", textMuted: "#6A6560", textDim: "#3A3530",
+  green: "#4CAF7A", red: "#D85555", blue: "#5B8DEF", purple: "#9B6FE8",
+  purpleFaint: "rgba(155,111,232,0.09)",
+};
+
+const T = {
+  en: {
+    appTitle: "UBO Calculator", appSub: "Ultimate Beneficial Owner · Cross-Ownership Resolution",
+    tabSetup: "Structure Setup", tabResults: "UBO Analysis",
+    registered: "registered", addEntity: "Add Entity", entityName: "Entity name (EN)",
+    entityNameAr: "Entity name (AR)", company: "Company / Entity", person: "Natural Person", add: "Add",
+    links: "links", addLink: "Add Ownership Link", ownerFrom: "Owner (from)",
+    ownedTo: "Owned entity (to)", pctPlaceholder: "Ownership %",
+    thresholdLabel: "UBO Threshold", thresholdCustom: "Custom",
+    thresholdNote: "Flagged as UBO if ownership ≥",
+    runAnalysis: "Run UBO Analysis →",
+    loopDetected: "⟲ Loop Detected", loopResolved: "⟲ Loop Resolved",
+    loopMsg: "Circular ownership identified in:", loopExplain: "Resolved via power iteration convergence.",
+    selectTarget: "Select Target Entity", ubosIdentified: "UBOs",
+    beneficialOwners: "Beneficial Owners", totalOwners: "Total owners",
+    accountedOwnership: "Accounted", ubosAbove: "UBOs above threshold",
+    disclosureRequired: "Disclosure required", directOwnership: "Direct",
+    indirectOwnership: "Indirect", noUbos: "No natural person beneficial owners found.",
+    noTarget: "Select a target entity to view its UBO analysis.",
+    disclaimer: "Indicative only. Not legal advice. Consult a qualified legal advisor before filing regulatory disclosures under Saudi Companies Law, AML regulations, and MOISA requirements.",
+    personTag: "Person", companyTag: "Co.", uboTag: "UBO", moisa: "MOISA registration recommended",
+  },
+  ar: {
+    appTitle: "حاسبة المستفيد الفعلي", appSub: "المستفيد الحقيقي النهائي · حل التملك المتقاطع",
+    tabSetup: "إعداد الهيكل", tabResults: "تحليل المستفيد الفعلي",
+    registered: "مسجّل", addEntity: "إضافة كيان", entityName: "الاسم (EN)",
+    entityNameAr: "الاسم (عربي)", company: "شركة / كيان", person: "شخص طبيعي", add: "إضافة",
+    links: "روابط", addLink: "إضافة رابط ملكية", ownerFrom: "المالك (من)",
+    ownedTo: "الكيان المملوك (إلى)", pctPlaceholder: "نسبة الملكية %",
+    thresholdLabel: "حد المستفيد الفعلي", thresholdCustom: "مخصص",
+    thresholdNote: "يُصنَّف مستفيداً فعلياً إذا كانت الملكية ≥",
+    runAnalysis: "← تشغيل تحليل المستفيد الفعلي",
+    loopDetected: "⟲ تم اكتشاف حلقة", loopResolved: "⟲ تم حل الحلقة",
+    loopMsg: "هيكل ملكية دائري في:", loopExplain: "تم الحل عبر التكرار التقاربي.",
+    selectTarget: "اختر الكيان المستهدف", ubosIdentified: "م.ف.",
+    beneficialOwners: "المستفيدون الحقيقيون", totalOwners: "إجمالي المستفيدين",
+    accountedOwnership: "المحسوب", ubosAbove: "مستفيد فوق الحد",
+    disclosureRequired: "الإفصاح مطلوب", directOwnership: "مباشر",
+    indirectOwnership: "غير مباشر", noUbos: "لم يتم العثور على مستفيدين من الأشخاص الطبيعيين.",
+    noTarget: "اختر كياناً مستهدفاً لعرض التحليل.",
+    disclaimer: "استرشادية فقط. لا تُشكّل استشارة قانونية. يُنصح باستشارة مستشار قانوني مؤهل قبل تقديم الإفصاحات التنظيمية بموجب نظام الشركات السعودي وأنظمة مكافحة غسل الأموال ومتطلبات وزارة الاستثمار.",
+    personTag: "شخص", companyTag: "شركة", uboTag: "م.ف.", moisa: "يُنصح بالتسجيل لدى وزارة الاستثمار",
+  },
+};
+
+function computeUBO(entities, links) {
+  const adj = {};
+  for (const e of entities) adj[e.id] = [];
+  for (const l of links) {
+    if (!adj[l.from]) adj[l.from] = [];
+    adj[l.from].push({ to: l.to, pct: l.pct / 100 });
+  }
+  const directOwnership = {};
+  for (const l of links) {
+    if (!directOwnership[l.to]) directOwnership[l.to] = {};
+    directOwnership[l.to][l.from] = (directOwnership[l.to][l.from] || 0) + l.pct / 100;
+  }
+  const results = {};
+  const loopsDetected = [];
+  for (const target of entities) {
+    const visited = new Set(), stack = new Set();
+    const hasCycle = (node) => {
+      if (stack.has(node)) return true;
+      if (visited.has(node)) return false;
+      visited.add(node); stack.add(node);
+      for (const { to } of adj[node] || []) { if (hasCycle(to)) return true; }
+      stack.delete(node); return false;
+    };
+    const cycleNodes = new Set();
+    for (const e of entities) {
+      visited.clear(); stack.clear(); stack.add(e.id);
+      if ((adj[e.id] || []).some(({ to }) => { visited.clear(); stack.clear(); stack.add(e.id); return hasCycle(to); }))
+        cycleNodes.add(e.id);
+    }
+    let eff = {};
+    for (const e of entities) eff[e.id] = 0;
+    eff[target.id] = 1.0;
+    for (let i = 0; i < 300; i++) {
+      let ne = {}, maxD = 0;
+      for (const e of entities) {
+        if (e.id === target.id) { ne[e.id] = 1.0; continue; }
+        let s = 0;
+        for (const { to, pct } of adj[e.id] || []) s += pct * eff[to];
+        ne[e.id] = s;
+      }
+      for (const e of entities) maxD = Math.max(maxD, Math.abs(ne[e.id] - eff[e.id]));
+      eff = ne;
+      if (maxD < 1e-10) break;
+    }
+    const hasLoop = entities.some(e => cycleNodes.has(e.id) && eff[e.id] > 0.001);
+    if (hasLoop) loopsDetected.push(target.name);
+    const ubos = [];
+    for (const e of entities) {
+      if (e.id === target.id) continue;
+      const isLeaf = (adj[e.id] || []).length === 0;
+      const totalPct = eff[e.id] * 100;
+      if (isLeaf && totalPct > 0.001) {
+        const directPct = ((directOwnership[target.id] || {})[e.id] || 0) * 100;
+        ubos.push({ entity: e, pct: Math.round(totalPct * 10000) / 10000, directPct: Math.round(directPct * 10000) / 10000, indirectPct: Math.round(Math.max(0, totalPct - directPct) * 10000) / 10000 });
+      }
+    }
+    results[target.id] = { target, ubos: ubos.sort((a, b) => b.pct - a.pct), hasLoop };
+  }
+  return { results, loopsDetected: [...new Set(loopsDetected)] };
+}
+
+let _id = 10;
+const nid = () => `e${_id++}`;
+
+const PRESETS = [
+  { label: "5%", labelFull: "5% — CMA", value: 5 },
+  { label: "10%", labelFull: "10%", value: 10 },
+  { label: "25%", labelFull: "25% — FATF", value: 25 },
+];
+
+// Shared style helpers
+const inp = { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: "2px", color: C.text, padding: "10px 12px", fontSize: "13px", outline: "none", width: "100%", WebkitAppearance: "none" };
+const sel = { ...inp, cursor: "pointer" };
+const btn = (active) => ({ background: active ? `${C.gold}18` : "transparent", border: `1px solid ${active ? C.gold : C.border}`, color: active ? C.goldLight : C.textMuted, padding: "8px 14px", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer", borderRadius: "2px", whiteSpace: "nowrap" });
+const tagSt = (type) => ({ display: "inline-block", padding: "2px 6px", fontSize: "9px", letterSpacing: "0.08em", textTransform: "uppercase", borderRadius: "2px", background: type === "person" ? "rgba(91,141,239,0.12)" : "rgba(201,168,76,0.12)", color: type === "person" ? C.blue : C.goldLight, border: `1px solid ${type === "person" ? "rgba(91,141,239,0.3)" : "rgba(122,96,48,0.4)"}`, flexShrink: 0 });
+const loopBadge = { display: "inline-flex", alignItems: "center", gap: "5px", background: C.purpleFaint, border: `1px solid rgba(155,111,232,0.3)`, color: C.purple, padding: "3px 9px", fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", borderRadius: "2px" };
+const greenBadge = { background: "rgba(76,175,122,0.12)", border: "1px solid rgba(76,175,122,0.3)", color: C.green, padding: "3px 9px", fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", borderRadius: "2px" };
+
+export default function App() {
+  const [lang, setLang] = useState("both");
+  const [threshold, setThreshold] = useState(25);
+  const [customThreshold, setCustomThreshold] = useState("");
+  const [useCustom, setUseCustom] = useState(false);
+  const [tab, setTab] = useState("setup");
+  const [selectedTarget, setSelectedTarget] = useState("e5");
+  const [entities, setEntities] = useState([
+    { id: "e1", name: "Alpha Holdings Ltd", nameAr: "ألفا للقابضة", type: "company" },
+    { id: "e2", name: "Beta Investments LLC", nameAr: "بيتا للاستثمارات", type: "company" },
+    { id: "e3", name: "Mohammed Al-Rashid", nameAr: "محمد الراشد", type: "person" },
+    { id: "e4", name: "Sarah Al-Mansouri", nameAr: "سارة المنصوري", type: "person" },
+    { id: "e5", name: "Target Co.", nameAr: "الشركة المستهدفة", type: "company" },
+  ]);
+  const [links, setLinks] = useState([
+    { id: "l1", from: "e3", to: "e1", pct: 60 }, { id: "l2", from: "e4", to: "e1", pct: 40 },
+    { id: "l3", from: "e3", to: "e2", pct: 30 }, { id: "l4", from: "e1", to: "e2", pct: 70 },
+    { id: "l5", from: "e1", to: "e5", pct: 55 }, { id: "l6", from: "e2", to: "e5", pct: 45 },
+  ]);
+  const [newEnt, setNewEnt] = useState({ name: "", nameAr: "", type: "company" });
+  const [newLnk, setNewLnk] = useState({ from: "", to: "", pct: "" });
+
+  const effThresh = useCustom ? (parseFloat(customThreshold) || 25) : threshold;
+  const isBoth = lang === "both";
+  const isAr = lang === "ar";
+  const t = isAr ? T.ar : T.en;
+
+  const { results, loopsDetected } = useMemo(() => computeUBO(entities, links), [entities, links]);
+  const targetResult = selectedTarget ? results[selectedTarget] : null;
+
+  const addEntity = () => {
+    if (!newEnt.name.trim()) return;
+    setEntities(p => [...p, { id: nid(), ...newEnt, name: newEnt.name.trim(), nameAr: newEnt.nameAr.trim() }]);
+    setNewEnt({ name: "", nameAr: "", type: "company" });
+  };
+  const removeEntity = (id) => {
+    setEntities(p => p.filter(e => e.id !== id));
+    setLinks(p => p.filter(l => l.from !== id && l.to !== id));
+    if (selectedTarget === id) setSelectedTarget("");
+  };
+  const addLink = () => {
+    if (!newLnk.from || !newLnk.to || !newLnk.pct || newLnk.from === newLnk.to) return;
+    const pct = parseFloat(newLnk.pct);
+    if (isNaN(pct) || pct <= 0 || pct > 100) return;
+    setLinks(p => [...p, { id: nid(), from: newLnk.from, to: newLnk.to, pct }]);
+    setNewLnk({ from: "", to: "", pct: "" });
+  };
+  const removeLink = (id) => setLinks(p => p.filter(l => l.id !== id));
+
+  // BiCol: renders EN | AR side by side (or single)
+  const BiCol = ({ en, ar, style: s = {}, gap = 16 }) => {
+    if (!isBoth) return <div style={s}>{isAr ? ar : en}</div>;
+    return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap, ...s }}><div>{en}</div><div style={{ direction: "rtl", textAlign: "right" }}>{ar}</div></div>;
+  };
+
+  // ── UBO Card ─────────────────────────────────────────────────────────────
+  const UBOCard = ({ entity, pct, directPct, indirectPct, isUBO }) => {
+    const card = (dir) => (
+      <div style={{ background: isUBO ? C.goldFaint : C.surface2, border: `1px solid ${isUBO ? C.goldDim : C.border}`, borderRadius: "2px", padding: "14px" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "8px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", flex: 1, minWidth: 0, flexDirection: dir === "rtl" ? "row-reverse" : "row" }}>
+            <span style={tagSt("person")}>{dir === "rtl" ? T.ar.personTag : T.en.personTag}</span>
+            <span style={{ fontSize: "14px", fontFamily: "'Cormorant Garamond', serif", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {dir === "rtl" ? (entity.nameAr || entity.name) : entity.name}
+            </span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0, flexDirection: dir === "rtl" ? "row-reverse" : "row" }}>
+            {isUBO && <span style={{ fontSize: "9px", letterSpacing: "0.08em", color: C.gold, border: `1px solid ${C.goldDim}`, padding: "2px 5px", borderRadius: "2px" }}>{dir === "rtl" ? T.ar.uboTag : T.en.uboTag}</span>}
+            <span style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "22px", fontWeight: 600, color: isUBO ? C.goldLight : C.textMuted }}>{pct.toFixed(2)}%</span>
+          </div>
+        </div>
+        <div style={{ marginTop: "10px", background: C.surface3, height: "3px", borderRadius: "2px", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${Math.min(pct, 100)}%`, background: isUBO ? `linear-gradient(${dir === "rtl" ? "270deg" : "90deg"}, ${C.goldDim}, ${C.gold})` : C.borderLight, borderRadius: "2px" }} />
+        </div>
+        <div style={{ marginTop: "8px", display: "flex", gap: "14px", justifyContent: dir === "rtl" ? "flex-end" : "flex-start" }}>
+          <span style={{ fontSize: "11px", color: C.textMuted }}><span style={{ color: C.blue }}>↓ {dir === "rtl" ? T.ar.directOwnership : T.en.directOwnership}</span> {directPct.toFixed(2)}%</span>
+          <span style={{ fontSize: "11px", color: C.textMuted }}><span style={{ color: C.purple }}>↗ {dir === "rtl" ? T.ar.indirectOwnership : T.en.indirectOwnership}</span> {indirectPct.toFixed(2)}%</span>
+        </div>
+        {isUBO && <div style={{ marginTop: "6px", fontSize: "10px", color: C.textMuted }}>{dir === "rtl" ? `${T.ar.disclosureRequired} · ${T.ar.moisa}` : `${T.en.disclosureRequired} · ${T.en.moisa}`}</div>}
+      </div>
+    );
+    return <BiCol en={card("ltr")} ar={card("rtl")} gap={10} />;
+  };
+
+  // ── Styles ───────────────────────────────────────────────────────────────
+  const panelSt = { background: C.surface, border: `1px solid ${C.border}`, borderRadius: "2px" };
+  const phSt = { padding: "13px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" };
+  const ptSt = { fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: C.gold };
+  const secLabel = { fontSize: "9px", letterSpacing: "0.14em", textTransform: "uppercase", color: C.textMuted };
+
+  return (
+    <div style={{ background: C.bg, minHeight: "100vh", minHeight: "100dvh" }}>
+
+      {/* ── Header ── */}
+      <div className="safe-top" style={{ borderBottom: `1px solid ${C.border}`, padding: "14px 16px 14px", background: C.surface }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+          <div>
+            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "15px", fontWeight: 600, letterSpacing: "0.08em", color: C.gold }}>LEAN COUNSEL</div>
+            <div style={{ fontSize: "9px", color: C.textMuted, letterSpacing: "0.12em", textTransform: "uppercase" }}>Studio · UBO Calculator</div>
+          </div>
+          {/* Lang toggle */}
+          <div style={{ display: "flex", border: `1px solid ${C.border}`, borderRadius: "2px", overflow: "hidden" }}>
+            {[["en","EN"],["both","EN|AR"],["ar","AR"]].map(([v,l]) => (
+              <button key={v} onClick={() => setLang(v)} style={{ background: lang === v ? C.gold : "transparent", border: "none", color: lang === v ? C.bg : C.textMuted, padding: "7px 11px", fontSize: "10px", letterSpacing: "0.06em", cursor: "pointer", fontWeight: lang === v ? 600 : 400 }}>{l}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Title */}
+        <div style={{ marginTop: "12px", textAlign: "center" }}>
+          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "22px", fontWeight: 500 }}>
+            {isBoth ? <span>UBO Calculator <span style={{ color: C.textMuted, fontWeight: 300 }}>·</span> حاسبة المستفيد الفعلي</span> : t.appTitle}
+          </div>
+        </div>
+
+        {/* Threshold bar */}
+        <div style={{ marginTop: "12px", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          <span style={{ ...secLabel, flexShrink: 0 }}>{isBoth ? "Threshold / الحد" : t.thresholdLabel}</span>
+          <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
+            {PRESETS.map(p => (
+              <button key={p.value} onClick={() => { setThreshold(p.value); setUseCustom(false); }} style={btn(!useCustom && threshold === p.value)}>{p.labelFull}</button>
+            ))}
+            <button onClick={() => setUseCustom(true)} style={btn(useCustom)}>{isBoth ? "Custom / مخصص" : t.thresholdCustom}</button>
+            {useCustom && (
+              <input style={{ ...inp, width: "72px", padding: "7px 10px" }} type="number" min="1" max="99" placeholder="%" value={customThreshold} onChange={e => setCustomThreshold(e.target.value)} />
+            )}
+          </div>
+          <span style={{ fontSize: "10px", color: C.textMuted }}>≥ {effThresh}%</span>
+        </div>
+      </div>
+
+      {/* ── Tabs ── */}
+      <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, background: C.surface }}>
+        {["setup","results"].map(tb => (
+          <button key={tb} onClick={() => setTab(tb)} style={{ flex: 1, background: "transparent", border: "none", borderBottom: tab === tb ? `2px solid ${C.gold}` : "2px solid transparent", color: tab === tb ? C.gold : C.textMuted, padding: "13px 8px", fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer", marginBottom: "-1px" }}>
+            {isBoth ? (tb === "setup" ? "Setup · إعداد" : "Analysis · تحليل") : (tb === "setup" ? t.tabSetup : t.tabResults)}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ padding: "16px", maxWidth: "900px", margin: "0 auto" }}>
+
+        {/* ══ SETUP TAB ══ */}
+        {tab === "setup" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+
+            {/* Entities */}
+            <div style={panelSt}>
+              <div style={phSt}>
+                <span style={ptSt}>{isBoth ? "Entities · الكيانات" : t.entitiesTitle || "Entities"}</span>
+                <span style={{ fontSize: "10px", color: C.textMuted }}>{entities.length} {isBoth ? "registered · مسجّل" : t.registered}</span>
+              </div>
+              <div style={{ padding: "14px" }}>
+                <div style={{ maxHeight: "220px", overflowY: "auto", marginBottom: "12px" }}>
+                  {entities.map(e => (
+                    <div key={e.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "9px 0", borderBottom: `1px solid ${C.border}` }}>
+                      <span style={tagSt(e.type)}>{e.type === "person" ? (isAr ? T.ar.personTag : T.en.personTag) : (isAr ? T.ar.companyTag : T.en.companyTag)}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "12px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</div>
+                        {e.nameAr && <div style={{ fontSize: "11px", color: C.textMuted, direction: "rtl", textAlign: "right" }}>{e.nameAr}</div>}
+                      </div>
+                      <button onClick={() => removeEntity(e.id)} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", fontSize: "18px", padding: "0 4px", lineHeight: 1, flexShrink: 0 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ ...secLabel, marginBottom: "8px" }}>{isBoth ? "Add Entity · إضافة كيان" : t.addEntity}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                  <input style={inp} placeholder={T.en.entityName} value={newEnt.name} onChange={e => setNewEnt(p => ({ ...p, name: e.target.value }))} onKeyDown={e => e.key === "Enter" && addEntity()} />
+                  <input style={{ ...inp, direction: "rtl", textAlign: "right" }} placeholder={T.ar.entityNameAr} value={newEnt.nameAr} onChange={e => setNewEnt(p => ({ ...p, nameAr: e.target.value }))} />
+                  <div style={{ display: "flex", gap: "7px" }}>
+                    <select style={{ ...sel, flex: 1 }} value={newEnt.type} onChange={e => setNewEnt(p => ({ ...p, type: e.target.value }))}>
+                      <option value="company">{isBoth ? "Company · شركة" : t.company}</option>
+                      <option value="person">{isBoth ? "Natural Person · شخص طبيعي" : t.person}</option>
+                    </select>
+                    <button style={{ ...btn(false), borderColor: C.gold, color: C.gold, padding: "10px 16px" }} onClick={addEntity}>{isAr ? T.ar.add : T.en.add}</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Links */}
+            <div style={panelSt}>
+              <div style={phSt}>
+                <span style={ptSt}>{isBoth ? "Ownership Links · روابط الملكية" : t.linksTitle || "Ownership Links"}</span>
+                <span style={{ fontSize: "10px", color: C.textMuted }}>{links.length} {isBoth ? "links · روابط" : t.links}</span>
+              </div>
+              <div style={{ padding: "14px" }}>
+                <div style={{ maxHeight: "200px", overflowY: "auto", marginBottom: "12px" }}>
+                  {links.map(l => {
+                    const from = entities.find(e => e.id === l.from);
+                    const to = entities.find(e => e.id === l.to);
+                    return (
+                      <div key={l.id} style={{ display: "flex", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${C.border}`, gap: "6px" }}>
+                        <span style={{ fontSize: "11px", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: C.textMuted }}>
+                          <span style={{ color: C.text }}>{from?.name}</span>
+                          <span style={{ color: C.gold, margin: "0 5px" }}>→</span>
+                          <span style={{ color: C.text }}>{to?.name}</span>
+                        </span>
+                        <span style={{ color: C.goldLight, fontSize: "12px", fontWeight: 500, flexShrink: 0 }}>{l.pct}%</span>
+                        <button onClick={() => removeLink(l.id)} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", fontSize: "18px", padding: "0 4px", lineHeight: 1, flexShrink: 0 }}>×</button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ ...secLabel, marginBottom: "8px" }}>{isBoth ? "Add Link · إضافة رابط" : t.addLink}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                  <select style={sel} value={newLnk.from} onChange={e => setNewLnk(p => ({ ...p, from: e.target.value }))}>
+                    <option value="">{isBoth ? "Owner (from) · المالك (من)" : t.ownerFrom}</option>
+                    {entities.map(e => <option key={e.id} value={e.id}>{e.name}{e.nameAr ? ` · ${e.nameAr}` : ""}</option>)}
+                  </select>
+                  <select style={sel} value={newLnk.to} onChange={e => setNewLnk(p => ({ ...p, to: e.target.value }))}>
+                    <option value="">{isBoth ? "Owned (to) · المملوك (إلى)" : t.ownedTo}</option>
+                    {entities.map(e => <option key={e.id} value={e.id}>{e.name}{e.nameAr ? ` · ${e.nameAr}` : ""}</option>)}
+                  </select>
+                  <div style={{ display: "flex", gap: "7px" }}>
+                    <input style={{ ...inp, flex: 1 }} type="number" min="0.01" max="100" placeholder={t.pctPlaceholder} value={newLnk.pct} onChange={e => setNewLnk(p => ({ ...p, pct: e.target.value }))} onKeyDown={e => e.key === "Enter" && addLink()} />
+                    <button style={{ ...btn(false), borderColor: C.gold, color: C.gold, padding: "10px 16px" }} onClick={addLink}>{isAr ? T.ar.add : T.en.add}</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Loop warning */}
+            {loopsDetected.length > 0 && (
+              <div style={{ ...panelSt, borderColor: "rgba(155,111,232,0.35)", background: C.purpleFaint }}>
+                <div style={{ padding: "13px 16px", display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                  <div style={loopBadge}>{isBoth ? "⟲ Loop Detected · تم اكتشاف حلقة" : t.loopDetected}</div>
+                  <div>
+                    <div style={{ fontSize: "11px", marginBottom: "3px" }}>
+                      {isBoth ? "Circular ownership: " : `${t.loopMsg} `}
+                      <span style={{ color: C.purple }}>{loopsDetected.join(", ")}</span>
+                    </div>
+                    <div style={{ fontSize: "10px", color: C.textMuted }}>{isBoth ? "Resolved via power iteration. Percentages reflect accurate ultimate ownership." : t.loopExplain}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <button onClick={() => setTab("results")} style={{ background: C.gold, border: "none", color: C.bg, padding: "14px", fontSize: "12px", letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer", borderRadius: "2px", fontWeight: 600, width: "100%" }}>
+              {isBoth ? "Run UBO Analysis · تشغيل التحليل ←" : t.runAnalysis}
+            </button>
+          </div>
+        )}
+
+        {/* ══ RESULTS TAB ══ */}
+        {tab === "results" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+
+            {/* Target selector */}
+            <div>
+              <div style={{ ...secLabel, marginBottom: "10px" }}>{isBoth ? "Select Target · اختر الكيان" : t.selectTarget}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {entities.filter(e => links.some(l => l.to === e.id)).map(e => (
+                  <div key={e.id} onClick={() => setSelectedTarget(e.id)} style={{ padding: "12px 14px", border: `1px solid ${selectedTarget === e.id ? C.gold : C.border}`, background: selectedTarget === e.id ? C.goldFaint : C.surface, borderRadius: "2px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ fontSize: "13px", color: selectedTarget === e.id ? C.goldLight : C.text }}>{e.name}</div>
+                      {e.nameAr && <div style={{ fontSize: "11px", color: C.textMuted, direction: "rtl", textAlign: "right" }}>{e.nameAr}</div>}
+                    </div>
+                    <div style={{ fontSize: "10px", color: C.textMuted, flexShrink: 0, marginLeft: "12px" }}>
+                      {results[e.id]?.ubos.length || 0} {isBoth ? "UBOs · م.ف." : t.ubosIdentified}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {targetResult ? (
+              <>
+                {/* Header */}
+                <BiCol
+                  en={
+                    <div>
+                      <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "22px", fontWeight: 500 }}>{targetResult.target.name}</div>
+                      <div style={{ fontSize: "10px", color: C.textMuted, marginTop: "3px" }}>Beneficial ownership · Threshold: {effThresh}%</div>
+                      <div style={{ display: "flex", gap: "7px", marginTop: "8px", flexWrap: "wrap" }}>
+                        {targetResult.hasLoop && <div style={loopBadge}>{T.en.loopResolved}</div>}
+                        <div style={greenBadge}>{targetResult.ubos.filter(u => u.pct >= effThresh).length} {T.en.ubosAbove}</div>
+                      </div>
+                    </div>
+                  }
+                  ar={
+                    <div style={{ direction: "rtl", textAlign: "right" }}>
+                      <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "22px", fontWeight: 500 }}>{targetResult.target.nameAr || targetResult.target.name}</div>
+                      <div style={{ fontSize: "10px", color: C.textMuted, marginTop: "3px" }}>تحليل الملكية · الحد: {effThresh}%</div>
+                      <div style={{ display: "flex", gap: "7px", marginTop: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        {targetResult.hasLoop && <div style={loopBadge}>{T.ar.loopResolved}</div>}
+                        <div style={greenBadge}>{targetResult.ubos.filter(u => u.pct >= effThresh).length} {T.ar.ubosAbove}</div>
+                      </div>
+                    </div>
+                  }
+                />
+
+                {/* Stats */}
+                <BiCol
+                  en={
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "8px" }}>
+                      {[[T.en.totalOwners, targetResult.ubos.length],[`Above ${effThresh}%`, targetResult.ubos.filter(u => u.pct >= effThresh).length],[T.en.accountedOwnership, `${Math.round(targetResult.ubos.reduce((s,u)=>s+u.pct,0)*10)/10}%`]].map(([l,v]) => (
+                        <div key={l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: "2px", padding: "12px 10px" }}>
+                          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "24px", fontWeight: 500, color: C.goldLight }}>{v}</div>
+                          <div style={{ fontSize: "9px", color: C.textMuted, textTransform: "uppercase", marginTop: "2px" }}>{l}</div>
+                        </div>
+                      ))}
+                    </div>
+                  }
+                  ar={
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "8px" }}>
+                      {[[T.ar.totalOwners, targetResult.ubos.length],[`فوق ${effThresh}%`, targetResult.ubos.filter(u => u.pct >= effThresh).length],[T.ar.accountedOwnership, `${Math.round(targetResult.ubos.reduce((s,u)=>s+u.pct,0)*10)/10}%`]].map(([l,v]) => (
+                        <div key={l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: "2px", padding: "12px 10px", direction: "rtl", textAlign: "right" }}>
+                          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "24px", fontWeight: 500, color: C.goldLight }}>{v}</div>
+                          <div style={{ fontSize: "9px", color: C.textMuted, textTransform: "uppercase", marginTop: "2px" }}>{l}</div>
+                        </div>
+                      ))}
+                    </div>
+                  }
+                />
+
+                {/* UBO section label */}
+                <div style={secLabel}>{isBoth ? "Beneficial Owners · المستفيدون الحقيقيون" : t.beneficialOwners}</div>
+
+                {/* UBO Cards */}
+                {targetResult.ubos.length === 0 ? (
+                  <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: "2px", padding: "28px", textAlign: "center", fontSize: "12px", color: C.textMuted }}>
+                    {isBoth ? `${T.en.noUbos} · ${T.ar.noUbos}` : t.noUbos}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    {targetResult.ubos.map(({ entity, pct, directPct, indirectPct }) => (
+                      <UBOCard key={entity.id} entity={entity} pct={pct} directPct={directPct} indirectPct={indirectPct} isUBO={pct >= effThresh} />
+                    ))}
+                  </div>
+                )}
+
+                {/* Disclaimer */}
+                <BiCol
+                  en={<div style={{ padding: "12px", border: `1px solid ${C.border}`, borderRadius: "2px", fontSize: "10px", color: C.textDim, lineHeight: "1.8" }}>{T.en.disclaimer}</div>}
+                  ar={<div style={{ padding: "12px", border: `1px solid ${C.border}`, borderRadius: "2px", fontSize: "10px", color: C.textDim, lineHeight: "1.9", direction: "rtl", textAlign: "right" }}>{T.ar.disclaimer}</div>}
+                />
+              </>
+            ) : (
+              <div style={{ textAlign: "center", padding: "60px 24px", color: C.textMuted, fontSize: "12px" }}>
+                {isBoth ? `${T.en.noTarget} · ${T.ar.noTarget}` : t.noTarget}
+              </div>
+            )}
+
+          </div>
+        )}
+
+        {/* Safe area bottom spacer */}
+        <div className="safe-bottom" style={{ height: "20px" }} />
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
